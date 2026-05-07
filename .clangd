@@ -1,5 +1,5 @@
 CompileFlags:
-  CompilationDatabase: build
+  CompilationDatabase: C:\Daten\proj\ESP32-C6_ILI9341_BME280\build
   Remove: [-m*, -f*]
 InlayHints: {Enabled: false}
 Diagnostics:
