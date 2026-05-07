@@ -37,3 +37,19 @@ LCD: https://www.waveshare.com/wiki/2.4inch_LCD_Module?srsltid=AfmBOoqtv3bq-mZfP
 
 ESP32-C6-DevKitC-1: https://www.reichelt.de/de/de/shop/produkt/entwicklungsboard_esp32-c6-wroom-1_u-380385
 
+
+
+# **How to start**
+1. git clone https://github.com/nikolai-baschinski/ESP32-C6_ILI9341_BME280.git
+2. Open Espressif IDE
+3. Open the project by File->Open Projects by File System.
+4. Choose just the top most project
+5. Select "Launch Mode" (e.g. Debug), "Launch Configuration" (e.g. ESP32-C6_ILI9341_BME280) and the target esp32c6.
+6. Choose idf version 6.0 by Espressif->ESP-IDF Manager
+7. Build
+8. Launch
+
+![](/doc/Import.png)
+
+
+![](/doc/Launch.png)
