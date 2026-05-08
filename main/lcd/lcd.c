@@ -6,7 +6,6 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 
-#define LCD_CS   GPIO_NUM_10
 #define LCD_RST  GPIO_NUM_3
 #define LCD_DC   GPIO_NUM_2
 
@@ -62,23 +61,12 @@ void lcd_gpio_init(void)
 {
   gpio_config_t io_conf = {
     .mode = GPIO_MODE_OUTPUT,
-    .pin_bit_mask = (1ULL << LCD_CS) | (1ULL << LCD_RST) | (1ULL << LCD_DC)
+    .pin_bit_mask = (1ULL << LCD_RST) | (1ULL << LCD_DC)
   };
   gpio_config(&io_conf);
 
-  gpio_set_level(LCD_CS, 1);   // idle 1
   gpio_set_level(LCD_RST, 1);  // no reset state
   gpio_set_level(LCD_DC, 1);   // data
-}
-
-void lcd_CS_enable()
-{
-  gpio_set_level(LCD_CS, 0);
-}
-
-void lcd_CS_disable()
-{
-  gpio_set_level(LCD_CS, 1);
 }
 
 void lcd_RST_set()
@@ -234,7 +222,7 @@ void lcd_reset()
   lcd_RST_reset();
    vTaskDelay(pdMS_TO_TICKS(100));
   lcd_RST_set();
-   vTaskDelay(pdMS_TO_TICKS(100));
+  vTaskDelay(pdMS_TO_TICKS(100));
 }
 
 void lcd_init()
@@ -336,26 +324,20 @@ void cyclic_LCD(struct ProcessImage* p_pi)
 
   if(g != g_mem || n != n_mem) {
     ESP_LOGI("", "Task_LCD: Writing temperature Old value: %d,%d. New value: %d,%d.\n", g_mem, n_mem, g, n);
-    lcd_CS_enable();
     Paint_ClearWindows(180, 30, 180+17*5, 50, WHITE);
     Paint_DrawFloatNum(180, 30, p_pi->bme280.temperature, 1, &Font24, WHITE, BLACK);
-    lcd_CS_disable();
   }
 
   if(p_pi->bme280.pressure != p_pi->bme280_memory.pressure) {
     ESP_LOGI("", "Task_LCD: Writing air pressure. Old value: %d. New value: %d\n", p_pi->bme280_memory.pressure, p_pi->bme280.pressure);
-    lcd_CS_enable();
     Paint_ClearWindows(180, 60, 180+17*4, 80, WHITE);
     Paint_DrawNum(180, 60, p_pi->bme280.pressure, &Font24, WHITE, BLACK);
-    lcd_CS_disable();
   }
 
   if(p_pi->bme280.humidity != p_pi->bme280_memory.humidity) {
     ESP_LOGI("", "Task_LCD: Writing humidity Old value: %d. New value: %d\n", p_pi->bme280_memory.humidity, p_pi->bme280.humidity);
-    lcd_CS_enable();
     Paint_ClearWindows(180, 90, 180+17*3, 110, WHITE);
     Paint_DrawNum(180, 90, p_pi->bme280.humidity, &Font24, WHITE, BLACK);
-    lcd_CS_disable();
   }
 
   p_pi->bme280_memory.temperature = p_pi->bme280.temperature;
@@ -368,7 +350,6 @@ void init_LCD()
   lcd_gpio_init();
   spi_lcd_init();
   lcd_reset();
-  lcd_CS_enable();
   lcd_init();
   lcd_clear_display(WHITE);
 
@@ -379,6 +360,4 @@ void init_LCD()
   Paint_DrawString_EN(10, 30, "Temperat:      C", &Font24, WHITE, BLACK);
   Paint_DrawString_EN(10, 60, "Pressure:      hPa", &Font24, WHITE, BLACK);
   Paint_DrawString_EN(10, 90, "Humidity:      %", &Font24, WHITE, BLACK);
-
-  lcd_CS_disable();
 }
