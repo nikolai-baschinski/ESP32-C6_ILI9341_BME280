@@ -1,6 +1,9 @@
 #include <string.h>
 #include "BME.h"
-#include "I2C.h"
+#include "SPI.h"
+#include "GPIO.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 const float MAX_TEMPERATURE = 85.0f;
 const float MIN_TEMPERATURE = -40.0f;
@@ -8,6 +11,8 @@ const uint16_t MAX_PRESSURE = 1100;
 const uint16_t MIN_PRESSURE = 300;
 const uint8_t MAX_HUMIDITY = 100;
 const uint8_t MIN_HUMIDITY = 0;
+
+const uint8_t burst_send_buffer[9] = {0xF7, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 struct Calibration_T {
   // The calibration values are individual for each sensor and have to be read
@@ -109,9 +114,11 @@ void bme_get_sensor_data(struct BME280_for_LCD* p_bme_data)
 
 uint8_t bme_read(uint8_t data)
 {
-  uint8_t rv = 0;
-  rv = i2c_write_read(data);
-  return rv;
+  #define SIZE_SEND_BUFFER 2
+  uint8_t send_buffer[SIZE_SEND_BUFFER] = {data, 0xFF};
+  uint8_t* p_receive_buffer = 0;
+  p_receive_buffer = spi_send_receive(send_buffer, SIZE_SEND_BUFFER, BME);
+  return p_receive_buffer[1];
 }
 
 void bme_fetch_compensation_data(struct BME* bme)
@@ -268,16 +275,16 @@ void bme_compensate()
 
 void bme_get_raw_sensor_data()
 {
-  uint8_t* p_burst_rcv_buffer = i2c_trancive_burst(0xF7, 8);
+  uint8_t* p_burst_rcv_buffer = spi_send_receive(burst_send_buffer, 9, BME);
 
-  bme.Adc_P.P_msb  = p_burst_rcv_buffer[0];
-  bme.Adc_P.P_lsb  = p_burst_rcv_buffer[1];
-  bme.Adc_P.P_xlsb = p_burst_rcv_buffer[2];
-  bme.Adc_T.T_msb  = p_burst_rcv_buffer[3];
-  bme.Adc_T.T_lsb  = p_burst_rcv_buffer[4];
-  bme.Adc_T.T_xlsb = p_burst_rcv_buffer[5];
-  bme.Adc_H.H_msb  = p_burst_rcv_buffer[6];
-  bme.Adc_H.H_lsb  = p_burst_rcv_buffer[7];
+  bme.Adc_P.P_msb  = p_burst_rcv_buffer[1];
+  bme.Adc_P.P_lsb  = p_burst_rcv_buffer[2];
+  bme.Adc_P.P_xlsb = p_burst_rcv_buffer[3];
+  bme.Adc_T.T_msb  = p_burst_rcv_buffer[4];
+  bme.Adc_T.T_lsb  = p_burst_rcv_buffer[5];
+  bme.Adc_T.T_xlsb = p_burst_rcv_buffer[6];
+  bme.Adc_H.H_msb  = p_burst_rcv_buffer[7];
+  bme.Adc_H.H_lsb  = p_burst_rcv_buffer[8];
 }
 
 void cyclic_BME(struct BME280_for_LCD* p_bme_data)
@@ -289,13 +296,21 @@ void cyclic_BME(struct BME280_for_LCD* p_bme_data)
 
 void init_BME()
 {
+/*  while(1) {
+    uint8_t addr[2] = {0xD0 | 0x80, 0x00};
+    uint8_t* p_id = spi_send_receive(addr, 2, BME);
+    uint8_t id = p_id[1];
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+*/
+  
   memset(&bme, 0, sizeof(bme));
   bme_fetch_compensation_data(&bme);
 
   #define LENGTH_BME_CONF 2
-  uint8_t control_bytes_F2[LENGTH_BME_CONF] = {0xF2, 0x01};
-  uint8_t control_bytes_F4[LENGTH_BME_CONF] = {0xF4, 0x27};
-  
-  i2c_write(control_bytes_F2, LENGTH_BME_CONF);
-  i2c_write(control_bytes_F4, LENGTH_BME_CONF);
+  uint8_t control_bytes_F2[LENGTH_BME_CONF] = {0x72, 0x01}; // first bit has to be 0, when writing
+  uint8_t control_bytes_F4[LENGTH_BME_CONF] = {0x74, 0x27}; // first bit has to be 0, when writing
+
+  spi_send(control_bytes_F2, LENGTH_BME_CONF, BME);
+  spi_send(control_bytes_F4, LENGTH_BME_CONF, BME);
 }

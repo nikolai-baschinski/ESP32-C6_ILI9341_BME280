@@ -1,8 +1,9 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include "esp_log.h"
+#include "GPIO.h"
+#include "SPI.h"
 #include "bme/bme.h"
-#include "bme/I2C.h"
 #include "lcd/lcd.h"
 #include "ProcessImage.h"
 #include "freertos/FreeRTOS.h"
@@ -12,7 +13,8 @@ struct ProcessImage pi={0};
 
 void app_main(void)
 {
-  init_I2C();
+  init_GPIO();
+  init_SPI();
   init_BME();
   init_LCD();
 

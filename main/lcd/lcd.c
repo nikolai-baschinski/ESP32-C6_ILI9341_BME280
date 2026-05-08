@@ -1,85 +1,10 @@
-#include "driver/gpio.h"
-#include "driver/spi_master.h"
-#include "lcd.h"
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-
-#define LCD_CS   GPIO_NUM_10
-#define LCD_RST  GPIO_NUM_3
-#define LCD_DC   GPIO_NUM_2
-
-const uint16_t SPI_MAX_TX_BUFFER_SIZE = 4092; // https://docs.espressif.com/projects/esp-idf/en/v6.0.1/esp32c6/api-reference/peripherals/spi_master.html#_CPPv4N16spi_bus_config_t15max_transfer_szE
-
-// SPI handle global
-spi_device_handle_t lcd_spi;
-
-void spi_lcd_init(void)
-{
-  esp_err_t rv;
-
-  // 1. config the bus
-  spi_bus_config_t spi_bus_cfg = {
-    .mosi_io_num = GPIO_NUM_7,// DIN (MOSI)
-    .miso_io_num = -1,        // not used
-    .sclk_io_num = GPIO_NUM_6,// CLK
-    .quadwp_io_num = -1,
-    .quadhd_io_num = -1,
-    .max_transfer_sz = SPI_MAX_TX_BUFFER_SIZE
-  };
-
-  rv = spi_bus_initialize(SPI2_HOST, &spi_bus_cfg, SPI_DMA_CH_AUTO);
-  if (rv == ESP_OK) {
-    ESP_LOGI("", "SPI bus initialization successfully");
-  } else {
-    ESP_LOGE("", "SPI bus initialization failed with %d", rv);
-    while(1);
-  }
-
-  // 2. config the device
-  spi_device_interface_config_t devcfg = {
-    .clock_speed_hz = 4 * 1000 * 1000,
-    .mode = 0,
-    .spics_io_num = GPIO_NUM_10, // CS Pin
-    .queue_size = 1,
-    .flags = 0,
-    .command_bits = 0,
-    .address_bits = 0,
-    .dummy_bits = 0
-  };
-
-  rv = spi_bus_add_device(SPI2_HOST, &devcfg, &lcd_spi);
-  if (rv == ESP_OK) {
-    ESP_LOGI("", "SPI added device successfully");
-  } else {
-    ESP_LOGE("", "SPI adding device failed with %d", rv);
-    while(1);
-  }
-}
-
-void lcd_gpio_init(void)
-{
-  gpio_config_t io_conf = {
-    .mode = GPIO_MODE_OUTPUT,
-    .pin_bit_mask = (1ULL << LCD_CS) | (1ULL << LCD_RST) | (1ULL << LCD_DC)
-  };
-  gpio_config(&io_conf);
-
-  gpio_set_level(LCD_CS, 1);   // idle 1
-  gpio_set_level(LCD_RST, 1);  // no reset state
-  gpio_set_level(LCD_DC, 1);   // data
-}
-
-void lcd_CS_enable()
-{
-  gpio_set_level(LCD_CS, 0);
-}
-
-void lcd_CS_disable()
-{
-  gpio_set_level(LCD_CS, 1);
-}
+#include "lcd.h"
+#include "GPIO.h"
+#include "SPI.h"
 
 void lcd_RST_set()
 {
@@ -101,27 +26,16 @@ void lcd_DC_set_command()
   gpio_set_level(LCD_DC, 0);
 }
 
-void spi_send(uint8_t byte)
-{
-  spi_transaction_t t = {
-    .length = 8,
-    .tx_buffer = &byte,
-    .rx_buffer = NULL
-  };
-
-  spi_device_transmit(lcd_spi, &t);
-}
-
 void lcd_send_c(uint8_t byte)
 {
   lcd_DC_set_command();
-  spi_send(byte);
+  spi_send(&byte, 1, LCD);
 }
 
 void lcd_send_d(uint8_t byte)
 {
   lcd_DC_set_data();
-  spi_send(byte);
+  spi_send(&byte, 1, LCD);
 }
 
 void lcd_set_window(uint16_t Xstart, uint16_t Ystart, uint16_t Xend, uint16_t Yend)
@@ -144,8 +58,10 @@ void lcd_set_window(uint16_t Xstart, uint16_t Ystart, uint16_t Xend, uint16_t Ye
 void lcd_send_d_word(uint16_t data)
 {
   lcd_DC_set_data();
-  spi_send((data>>8) & 0xff);
-  spi_send(data);
+  uint8_t msb_byte = (data>>8) & 0xFF;
+  uint8_t lsb_byte = data & 0xFF;
+  spi_send(&msb_byte, 1, LCD);
+  spi_send(&lsb_byte, 1, LCD);
 }
 
 void lcd_clear_display(uint16_t color)
@@ -162,22 +78,17 @@ void lcd_clear_display(uint16_t color)
 
   // For each pixel 2 bytes have to be transfered, so WIDTH * HEIGHT * 2 bytes
   // Each send action can transmit SPI_MAX_TX_BEFFER_SIZE bytes.
-  size_t total_bytes = LCD_2IN4_WIDTH * LCD_2IN4_HEIGHT * 2;
-  size_t sent = 0;
+  int32_t total_bytes = LCD_2IN4_WIDTH * LCD_2IN4_HEIGHT * 2;
+  int32_t sent = 0;
 
   while (sent < total_bytes) {
-    size_t chunk = SPI_MAX_TX_BUFFER_SIZE;
+    uint32_t chunk = SPI_MAX_TX_BUFFER_SIZE;
 
     if (total_bytes - sent < chunk) {
       chunk = total_bytes - sent;
     }
 
-    spi_transaction_t t = {
-      .length = chunk * 8,
-      .tx_buffer = buffer,
-    };
-
-    spi_device_transmit(lcd_spi, &t);
+    spi_send(buffer, chunk, LCD);
 
     sent += chunk;
   }
@@ -336,26 +247,20 @@ void cyclic_LCD(struct ProcessImage* p_pi)
 
   if(g != g_mem || n != n_mem) {
     ESP_LOGI("", "Task_LCD: Writing temperature Old value: %d,%d. New value: %d,%d.\n", g_mem, n_mem, g, n);
-    lcd_CS_enable();
     Paint_ClearWindows(180, 30, 180+17*5, 50, WHITE);
     Paint_DrawFloatNum(180, 30, p_pi->bme280.temperature, 1, &Font24, WHITE, BLACK);
-    lcd_CS_disable();
   }
 
   if(p_pi->bme280.pressure != p_pi->bme280_memory.pressure) {
     ESP_LOGI("", "Task_LCD: Writing air pressure. Old value: %d. New value: %d\n", p_pi->bme280_memory.pressure, p_pi->bme280.pressure);
-    lcd_CS_enable();
     Paint_ClearWindows(180, 60, 180+17*4, 80, WHITE);
     Paint_DrawNum(180, 60, p_pi->bme280.pressure, &Font24, WHITE, BLACK);
-    lcd_CS_disable();
   }
 
   if(p_pi->bme280.humidity != p_pi->bme280_memory.humidity) {
     ESP_LOGI("", "Task_LCD: Writing humidity Old value: %d. New value: %d\n", p_pi->bme280_memory.humidity, p_pi->bme280.humidity);
-    lcd_CS_enable();
     Paint_ClearWindows(180, 90, 180+17*3, 110, WHITE);
     Paint_DrawNum(180, 90, p_pi->bme280.humidity, &Font24, WHITE, BLACK);
-    lcd_CS_disable();
   }
 
   p_pi->bme280_memory.temperature = p_pi->bme280.temperature;
@@ -365,10 +270,7 @@ void cyclic_LCD(struct ProcessImage* p_pi)
 
 void init_LCD()
 {
-  lcd_gpio_init();
-  spi_lcd_init();
   lcd_reset();
-  lcd_CS_enable();
   lcd_init();
   lcd_clear_display(WHITE);
 
@@ -379,6 +281,4 @@ void init_LCD()
   Paint_DrawString_EN(10, 30, "Temperat:      C", &Font24, WHITE, BLACK);
   Paint_DrawString_EN(10, 60, "Pressure:      hPa", &Font24, WHITE, BLACK);
   Paint_DrawString_EN(10, 90, "Humidity:      %", &Font24, WHITE, BLACK);
-
-  lcd_CS_disable();
 }

@@ -7,27 +7,15 @@ BME280, 2.4" LCD and the ESP32-C6-DevKitC-1
 Connections (https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c6/esp32-c6-devkitc-1/user_guide.html#getting-started)
 
 
-| LCD Pin | ESP32-C6 GPIO | Function     |
-| ------- | --------------| ------------ |
-| VCC     | 3.3V          | Versorgung   |
-| GND     | GND           | Masse        |
-| DIN     | GPIO7         | MOSI         |
-| CLK     | GPIO6         | SCLK         |
-| CS      | GPIO10        | Chip Select  |
-| DC      | GPIO2         | Data/Command |
-| RST     | GPIO3         | Reset        |
-| BL      | 3.3V          | Backlight    |
-
-
-
-| BME280   | Port       | Function     |
-|----------|------------|--------------|
-| VCC      | 3,3V       | Vcc          |
-| GND      | GND        | GND          |
-| SCL      | GPIO4      | Clock        |
-| SDA      | GPIO5      | Data         |
-| ADDR     | not conn.  |              |
-| CS       | 3,3V       | Vcc          |
+| Signal   | GPIO   |
+| -------- | ------ |
+| SPI CLK  | GPIO6  |
+| SPI MOSI | GPIO7  |
+| SPI MISO | GPIO4  |
+| LCD_CS   | GPIO10 |
+| LCD_DC   | GPIO2  |
+| LCD_RST  | GPIO3  |
+| BME_CS   | GPIO5  |
 
 
 Hardware
